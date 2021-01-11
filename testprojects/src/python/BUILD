@@ -37,11 +37,6 @@ files(
 )
 
 files(
-  name = 'python_targets_directory',
-  sources = ['python_targets/**/*'],
-)
-
-files(
   name = 'sources_directory',
   sources = ['sources/**/*'],
 )

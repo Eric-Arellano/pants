@@ -10,13 +10,8 @@ python_tests(
 
 
 python_integration_tests(
-  name = 'changed_integration',
-  sources = ['changed_integration_test.py'],
-  dependencies = [
-    '//:gitignore',
-    'testprojects/src/python:python_targets_directory',
-    'testprojects/src/python:sources_directory',
-  ],
+  name='changed_integration',
+  sources=['changed_integration_test.py'],
   uses_pants_run=True,
-  timeout = 600,
+  timeout=600,
 )

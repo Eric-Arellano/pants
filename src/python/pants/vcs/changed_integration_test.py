@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
 import os
-import shutil
 import subprocess
 import unittest
 from contextlib import contextmanager
@@ -12,10 +11,14 @@ from typing import Iterator, List, Optional
 import pytest
 
 from pants.base.build_environment import get_buildroot
+<<<<<<< Updated upstream
 from pants.testutil.pants_integration_test import PantsResult, run_pants, run_pants_with_workdir
+=======
+from pants.testutil.pants_integration_test import PantsIntegrationTest, ensure_daemon, run_pants
+>>>>>>> Stashed changes
 from pants.testutil.test_base import AbstractTestGenerator
 from pants.util.contextutil import environment_as, temporary_dir
-from pants.util.dirutil import safe_delete, safe_mkdir, safe_open, touch
+from pants.util.dirutil import safe_delete, safe_open, touch
 from pants.vcs.git import Git
 
 
@@ -112,16 +115,6 @@ def create_isolated_git_repo():
             """Creates a file in the isolated git repo."""
             return create_file_in(worktree, path, content)
 
-        def copy_into(path, to_path=None):
-            """Copies a file from the real git repo into the isolated git repo."""
-            write_path = os.path.join(worktree, to_path or path)
-            if os.path.isfile(path):
-                safe_mkdir(os.path.dirname(write_path))
-                shutil.copyfile(path, write_path)
-            else:
-                shutil.copytree(path, write_path)
-            return write_path
-
         create_file("README", "N.B. This is just a test tree.")
         create_file(
             "pants.toml",
@@ -131,16 +124,14 @@ def create_isolated_git_repo():
             backend_packages.add = ["pants.backend.python", "internal_plugins.releases"]
             """,
         )
-        copy_into(".gitignore")
 
         with initialize_repo(worktree=worktree, gitdir=os.path.join(worktree, ".git")) as git:
 
-            def add_to_git(commit_msg, *files):
+            def add_to_git(*files):
                 git.add(*files)
-                git.commit(commit_msg)
+                git.commit("Set up project")
 
             add_to_git(
-                "resource file",
                 create_file(
                     "src/resources/org/pantsbuild/resourceonly/BUILD",
                     """
@@ -155,20 +146,11 @@ def create_isolated_git_repo():
                 ),
             )
 
-            add_to_git(
-                "python targets",
-                copy_into("testprojects/src/python/python_targets", "src/python/python_targets"),
-            )
-
-            add_to_git(
-                'a python_library with resources=["filename"]',
-                copy_into("testprojects/src/python/sources", "src/python/sources"),
-            )
-
             with environment_as(PANTS_BUILDROOT_OVERRIDE=worktree):
                 yield worktree
 
 
+<<<<<<< Updated upstream
 class ChangedIntegrationTest(unittest.TestCase, AbstractTestGenerator):
     @staticmethod
     def run_pants(*args, **kwargs) -> PantsResult:
@@ -179,6 +161,11 @@ class ChangedIntegrationTest(unittest.TestCase, AbstractTestGenerator):
     def run_pants_with_workdir(*args, **kwargs) -> PantsResult:
         # Git isn't detected if hermetic=True for some reason.
         return run_pants_with_workdir(*args, **{**kwargs, **{"hermetic": False}})
+=======
+class ChangedIntegrationTest(PantsIntegrationTest, AbstractTestGenerator):
+
+    hermetic = False
+>>>>>>> Stashed changes
 
     TEST_MAPPING = {
         # A `pex_binary` with `entry_point='file.name'` (secondary ownership), and a
@@ -265,109 +252,125 @@ class ChangedIntegrationTest(unittest.TestCase, AbstractTestGenerator):
                     inner_integration_coverage_test,
                 )
 
-    def run_list(self, extra_args: Optional[List[str]] = None) -> str:
-        pants_run = self.run_pants(["list", *(extra_args or ())])
+def run_list(extra_args: Optional[List[str]] = None) -> str:
+    # Git isn't detected if hermetic=True.
+    pants_run = run_pants(["list", *(extra_args or ())], hermetic=False)
+    pants_run.assert_success()
+    return pants_run.stdout
+
+
+def test_changed_exclude_root_targets_only() -> None:
+    changed_src = "src/python/python_targets/test_library.py"
+    exclude_target_regexp = r"_[0-9]"
+    excluded_set = {
+        "src/python/python_targets:test_library_transitive_dependee_2",
+        "src/python/python_targets:test_library_transitive_dependee_3",
+        "src/python/python_targets:test_library_transitive_dependee_4",
+    }
+    expected_set = set(self.TEST_MAPPING[changed_src]["transitive"]) - excluded_set
+
+    with create_isolated_git_repo() as worktree:
+        with mutated_working_copy([os.path.join(worktree, changed_src)]):
+            # Making sure workdir is under buildroot
+            with temporary_dir(root_dir=worktree, suffix=".pants.d") as workdir:
+                pants_run = self.run_pants_with_workdir(
+                    command=[
+                        f"--exclude-target-regexp={exclude_target_regexp}",
+                        "--changed-since=HEAD",
+                        "--changed-dependees=transitive",
+                        "list",
+                    ],
+                    workdir=workdir,
+                )
+
         pants_run.assert_success()
-        return pants_run.stdout
+        for expected_item in expected_set:
+            self.assertIn(expected_item, pants_run.stdout)
 
-    def test_changed_exclude_root_targets_only(self):
-        changed_src = "src/python/python_targets/test_library.py"
-        exclude_target_regexp = r"_[0-9]"
-        excluded_set = {
-            "src/python/python_targets:test_library_transitive_dependee_2",
-            "src/python/python_targets:test_library_transitive_dependee_3",
-            "src/python/python_targets:test_library_transitive_dependee_4",
-        }
-        expected_set = set(self.TEST_MAPPING[changed_src]["transitive"]) - excluded_set
+        for excluded_item in excluded_set:
+            self.assertNotIn(excluded_item, pants_run.stdout)
 
-        with create_isolated_git_repo() as worktree:
-            with mutated_working_copy([os.path.join(worktree, changed_src)]):
-                # Making sure workdir is under buildroot
-                with temporary_dir(root_dir=worktree, suffix=".pants.d") as workdir:
-                    pants_run = self.run_pants_with_workdir(
-                        command=[
-                            f"--exclude-target-regexp={exclude_target_regexp}",
-                            "--changed-since=HEAD",
-                            "--changed-dependees=transitive",
-                            "list",
-                        ],
-                        workdir=workdir,
-                    )
 
-            pants_run.assert_success()
-            for expected_item in expected_set:
-                self.assertIn(expected_item, pants_run.stdout)
+def test_changed_not_exclude_inner_targets(self):
+    changed_src = "src/python/python_targets/test_library.py"
+    exclude_target_regexp = r"_[0-9]"
+    excluded_set = {
+        "src/python/python_targets:test_library_transitive_dependee_2",
+        "src/python/python_targets:test_library_transitive_dependee_3",
+        "src/python/python_targets:test_library_transitive_dependee_4",
+    }
+    expected_set = set(self.TEST_MAPPING[changed_src]["transitive"]) - excluded_set
 
-            for excluded_item in excluded_set:
-                self.assertNotIn(excluded_item, pants_run.stdout)
+    with create_isolated_git_repo() as worktree:
+        with mutated_working_copy([os.path.join(worktree, changed_src)]):
+            # Making sure workdir is under buildroot
+            with temporary_dir(root_dir=worktree, suffix=".pants.d") as workdir:
+                pants_run = self.run_pants_with_workdir(
+                    [
+                        f"--exclude-target-regexp={exclude_target_regexp}",
+                        "--changed-since=HEAD",
+                        "--changed-dependees=transitive",
+                        "list",
+                    ],
+                    workdir=workdir,
+                )
 
-    def test_changed_not_exclude_inner_targets(self):
-        changed_src = "src/python/python_targets/test_library.py"
-        exclude_target_regexp = r"_[0-9]"
-        excluded_set = {
-            "src/python/python_targets:test_library_transitive_dependee_2",
-            "src/python/python_targets:test_library_transitive_dependee_3",
-            "src/python/python_targets:test_library_transitive_dependee_4",
-        }
-        expected_set = set(self.TEST_MAPPING[changed_src]["transitive"]) - excluded_set
+        pants_run.assert_success()
+        for expected_item in expected_set:
+            self.assertIn(expected_item, pants_run.stdout)
 
-        with create_isolated_git_repo() as worktree:
-            with mutated_working_copy([os.path.join(worktree, changed_src)]):
-                # Making sure workdir is under buildroot
-                with temporary_dir(root_dir=worktree, suffix=".pants.d") as workdir:
-                    pants_run = self.run_pants_with_workdir(
-                        [
-                            f"--exclude-target-regexp={exclude_target_regexp}",
-                            "--changed-since=HEAD",
-                            "--changed-dependees=transitive",
-                            "list",
-                        ],
-                        workdir=workdir,
-                    )
+        for excluded_item in excluded_set:
+            self.assertNotIn(excluded_item, pants_run.stdout)
 
-            pants_run.assert_success()
-            for expected_item in expected_set:
-                self.assertIn(expected_item, pants_run.stdout)
 
-            for excluded_item in excluded_set:
-                self.assertNotIn(excluded_item, pants_run.stdout)
+def test_changed_with_multiple_build_files() -> None:
+    """Changes in a second BUILD file should not cause targets from the other BUILD file to be
+    changed."""
+    new_build_file = "src/python/python_targets/BUILD.new"
+    with create_isolated_git_repo() as worktree:
+        touch(os.path.join(worktree, new_build_file))
+        assert run_list().strip() == ""
 
-    def test_changed_with_multiple_build_files(self):
-        new_build_file = "src/python/python_targets/BUILD.new"
-        with create_isolated_git_repo() as worktree:
-            touch(os.path.join(worktree, new_build_file))
-            stdout_data = self.run_list()
-            self.assertEqual(stdout_data.strip(), "")
 
-    def test_changed_with_deleted_source(self):
-        # TODO: Update to use multiple sources, with only one deleted.
-        with create_isolated_git_repo() as worktree:
-            safe_delete(os.path.join(worktree, "src/python/sources/sources.py"))
-            pants_run = self.run_pants(["list", "--changed-since=HEAD"])
-            pants_run.assert_success()
-            self.assertEqual(pants_run.stdout.strip(), "src/python/sources")
+def test_changed_with_deleted_source(self):
+    # TODO: Update to use multiple sources, with only one deleted.
+    with create_isolated_git_repo() as worktree:
+        safe_delete(os.path.join(worktree, "src/python/sources/sources.py"))
+        pants_run = self.run_pants(["list", "--changed-since=HEAD"])
+        pants_run.assert_success()
+        self.assertEqual(pants_run.stdout.strip(), "src/python/sources")
 
-    def test_changed_with_deleted_resource(self):
-        with create_isolated_git_repo() as worktree:
-            safe_delete(os.path.join(worktree, "src/python/sources/sources.txt"))
-            pants_run = self.run_pants(["list", "--changed-since=HEAD"])
-            pants_run.assert_success()
-            self.assertEqual(pants_run.stdout.strip(), "src/python/sources:text")
 
-    @pytest.mark.skip(reason="Unskip after rewriting these tests to stop using testprojects.")
-    def test_changed_with_deleted_target_transitive(self):
-        # TODO: The deleted target should be a dependee of another target. We want to make sure
-        # that this causes a crash because the dependee can't find it's dependency.
-        with create_isolated_git_repo() as worktree:
-            safe_delete(os.path.join(worktree, "src/resources/org/pantsbuild/resourceonly/BUILD"))
-            pants_run = self.run_pants(
-                ["list", "--changed-since=HEAD", "--changed-dependees=transitive"]
-            )
-            pants_run.assert_failure()
-            self.assertRegex(
-                pants_run.stderr, "src/resources/org/pantsbuild/resourceonly:.*did not exist"
-            )
+def test_changed_with_deleted_resource(self):
+    with create_isolated_git_repo() as worktree:
+        safe_delete(os.path.join(worktree, "src/python/sources/sources.txt"))
+        pants_run = self.run_pants(["list", "--changed-since=HEAD"])
+        pants_run.assert_success()
+        self.assertEqual(pants_run.stdout.strip(), "src/python/sources:text")
 
+
+@pytest.mark.skip(reason="Unskip after rewriting these tests to stop using testprojects.")
+def test_changed_with_deleted_target_transitive(self):
+    # TODO: The deleted target should be a dependee of another target. We want to make sure
+    # that this causes a crash because the dependee can't find it's dependency.
+    with create_isolated_git_repo() as worktree:
+        safe_delete(os.path.join(worktree, "src/resources/org/pantsbuild/resourceonly/BUILD"))
+        pants_run = self.run_pants(
+            ["list", "--changed-since=HEAD", "--changed-dependees=transitive"]
+        )
+        pants_run.assert_failure()
+        self.assertRegex(
+            pants_run.stderr, "src/resources/org/pantsbuild/resourceonly:.*did not exist"
+        )
+
+def test_changed_in_directory_without_build_file() -> None:
+    with create_isolated_git_repo() as worktree:
+        create_file_in(worktree, "new-project/README.txt", "This is important.")
+        stdout = run_list(["--changed-since=HEAD"])
+    assert stdout.strip() == ""
+
+
+<<<<<<< Updated upstream
     def test_changed_in_directory_without_build_file(self):
         with create_isolated_git_repo() as worktree:
             create_file_in(worktree, "new-project/README.txt", "This is important.")
@@ -383,6 +386,14 @@ class ChangedIntegrationTest(unittest.TestCase, AbstractTestGenerator):
             pants_run = self.run_pants(["--changed-since=HEAD", "list"])
             pants_run.assert_success()
             self.assertEqual(pants_run.stdout.strip(), "src/python/sources")
+=======
+@ensure_daemon
+def test_list_changed() -> None:
+    with create_isolated_git_repo() as worktree:
+        safe_delete(os.path.join(worktree, "src/python/sources/sources.py"))
+        stdout = run_list(["--changed-since=HEAD"])
+    assert stdout.strip() == "src/python/sources"
+>>>>>>> Stashed changes
 
 
 ChangedIntegrationTest.generate_tests()
