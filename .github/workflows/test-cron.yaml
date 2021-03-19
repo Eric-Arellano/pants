@@ -121,8 +121,7 @@ jobs:
         '
     strategy:
       matrix:
-        python-version:
-        - 3.8.3
+        python-version: 3.8.3
   bootstrap_pants_macos:
     env:
       PANTS_CONFIG_FILES: +['pants.ci.toml', 'pants.remote-cache.toml']
@@ -224,12 +223,11 @@ jobs:
       run: ./cargo test --tests -- --nocapture
     strategy:
       matrix:
-        python-version:
-        - 3.8.3
-  lint_python_linux:
+        python-version: 3.8.3
+  lint_python:
     env:
       PANTS_CONFIG_FILES: +['pants.ci.toml', 'pants.remote-cache.toml']
-    name: Lint Python (Linux)
+    name: Lint Python
     needs: bootstrap_pants_linux
     runs-on: ubuntu-20.04
     steps:
@@ -282,8 +280,7 @@ jobs:
         '
     strategy:
       matrix:
-        python-version:
-        - 3.8.3
+        python-version: 3.8.3
   test_python_linux:
     env:
       PANTS_CONFIG_FILES: +['pants.ci.toml', 'pants.remote-cache.toml']
@@ -340,8 +337,7 @@ jobs:
         '
     strategy:
       matrix:
-        python-version:
-        - 3.8.3
+        python-version: 3.8.3
   test_python_macos:
     env:
       ARCHFLAGS: -arch x86_64
@@ -399,8 +395,7 @@ jobs:
         '
     strategy:
       matrix:
-        python-version:
-        - 3.8.3
+        python-version: 3.8.3
 name: Daily Extended Python Testing
 'on':
   schedule:
