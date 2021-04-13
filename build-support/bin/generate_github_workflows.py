@@ -377,15 +377,19 @@ def test_workflow_jobs(primary_python_version: str, *, cron: bool) -> Jobs:
 
         def build_wheels_step(*, is_macos: bool) -> Step:
             step = {
-                "name": "Build wheels and fs_util",
+                "name": "Build wheels and maybe fs_util",
                 "run": dedent(
                     # We use MODE=debug on PR builds to speed things up, given that those are only
                     # smoke tests of our release process.
+                    #
+                    # We also skip building fs_util on PR builds, given that Pants compilation
+                    # already checks the code compiles and the release process is simple
+                    # (and low-stakes).
                     """\
                     [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]] && export MODE=debug
                     ./build-support/bin/release.sh -n
                     USE_PY38=true ./build-support/bin/release.sh -n
-                    ./build-support/bin/release.sh -f
+                    [[ "${GITHUB_EVENT_NAME}" != "pull_request" ]] && ./build-support/bin/release.sh -f
                     """
                 ),
                 "if": DONT_SKIP_WHEELS,
