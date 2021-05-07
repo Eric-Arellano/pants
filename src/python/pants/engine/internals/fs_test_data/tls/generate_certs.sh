@@ -8,6 +8,8 @@ set -xeuo pipefail
 rm -rf rsa/
 mkdir rsa/
 
+unused="foo"
+
 openssl req -nodes \
   -x509 \
   -days 3650 \
