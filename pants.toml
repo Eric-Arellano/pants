@@ -20,7 +20,6 @@ backend_packages.add = [
 ]
 plugins = [
   "hdrhistogram",  # For use with `--stats-log`.
-  "toolchain.pants.plugin==0.10.0",
 ]
 
 # The invalidation globs cover the PYTHONPATH by default, but we exclude some files that are on the
@@ -56,7 +55,7 @@ remote_instance_name = "main"
 remote_auth_plugin = "toolchain.pants.auth.plugin:toolchain_auth_plugin"
 
 [anonymous-telemetry]
-enabled = true
+enabled = false
 repo_id = "7775F8D5-FC58-4DBC-9302-D00AE4A1505F"
 
 [source]
@@ -169,6 +168,3 @@ interpreter_constraints = [">=3.7,<3.10"]
 
 [sourcefile-validation]
 config = "@build-support/regexes/config.yaml"
-
-[toolchain-setup]
-repo = "pants"
